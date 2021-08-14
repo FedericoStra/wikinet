@@ -52,8 +52,6 @@ fn setup() {
     tracing_subscriber::fmt::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
-        .with_thread_ids(true)
-        .with_thread_names(true)
         .without_time()
         .init();
 

@@ -1,4 +1,4 @@
-use html5ever::rcdom::{Handle, NodeData};
+use html5ever::rcdom::{Handle, Node, NodeData};
 use soup::prelude::*;
 
 #[tracing::instrument(skip(html))]
@@ -14,6 +14,7 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
         .class("mw-parser-output")
         .find()
         .expect("cannot find .mw-parser-output");
+
     for p in mw_parser_output.tag("p").recursive(false).find_all() {
         {
             let p = p.display();
@@ -23,6 +24,19 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
                 tracing::debug!("p = {:?} ...", &p[0..64]);
             }
         }
+
+        let span = tracing::debug_span!("asd").entered();
+        for handle in iter_links(html) {
+            let data = &handle.data;
+            match data {
+                NodeData::Element { name, attrs, .. } => {
+                    tracing::debug!(?name.local, ?attrs);
+                }
+                _ => {}
+            }
+        }
+        span.exit();
+
         let mut parens: i32 = 0;
         for c in p.children.borrow().iter() {
             match c.data {
@@ -62,6 +76,101 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
         }
     }
     None
+}
+
+pub fn filter_valid_links<'a>(
+    nodes: impl Iterator<Item = &'a Node>,
+) -> impl Iterator<Item = &'a Node> {
+    nodes
+        .scan(0, |&mut parens, c| {
+            if let NodeData::Text { ref contents } = c.data {
+                let text: &str = &contents.borrow()[..];
+                let opening = text.matches('(').count() as i32;
+                let closing = text.matches(')').count() as i32;
+                tracing::trace!(opening, closing, "Text: parentheses:");
+                Some((parens + opening - closing, c))
+            } else {
+                Some((parens, c))
+            }
+        })
+        .filter_map(|(parens, c)| {
+            if let NodeData::Element { name, attrs, .. } = &c.data {
+                if parens > 0 {
+                    return None;
+                }
+                let tag: &str = &name.local[..];
+                if tag == "a" {
+                    for attr in attrs.borrow().iter() {
+                        let html5ever::tree_builder::Attribute { name, value } = attr;
+                        let key: &str = &name.local[..];
+                        if key == "href" {
+                            if let Some(_) = normalize_href(&value[..]) {
+                                let link = &value[..];
+                                tracing::debug!(link, "found");
+                                return Some(c.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            return None;
+        })
+}
+
+#[tracing::instrument(skip(html))]
+pub fn iter_links(html: &str) -> impl Iterator<Item = Handle> {
+    let soup = Soup::new(html);
+    let mw_content_text = soup
+        .tag("div")
+        .attr("id", "mw-content-text")
+        .find()
+        .expect("cannot find #mw-content-text");
+    let mw_parser_output = mw_content_text
+        .tag("div")
+        .class("mw-parser-output")
+        .find()
+        .expect("cannot find .mw-parser-output");
+    let paragraphs = mw_parser_output.tag("p").recursive(false).find_all();
+
+    paragraphs.flat_map(|p: Handle| {
+        p.children
+            .borrow()
+            .iter()
+            .scan(0, |&mut parens, c| {
+                if let NodeData::Text { ref contents } = c.data {
+                    let text: &str = &contents.borrow()[..];
+                    let opening = text.matches('(').count() as i32;
+                    let closing = text.matches(')').count() as i32;
+                    tracing::trace!(opening, closing, "Text: parentheses:");
+                    Some((parens + opening - closing, c))
+                } else {
+                    Some((parens, c))
+                }
+            })
+            .filter_map(|(parens, c)| {
+                if let NodeData::Element { name, attrs, .. } = &c.data {
+                    if parens > 0 {
+                        return None;
+                    }
+                    let tag: &str = &name.local[..];
+                    if tag == "a" {
+                        for attr in attrs.borrow().iter() {
+                            let html5ever::tree_builder::Attribute { name, value } = attr;
+                            let key: &str = &name.local[..];
+                            if key == "href" {
+                                if let Some(_) = normalize_href(&value[..]) {
+                                    let link = &value[..];
+                                    tracing::debug!(link, "found");
+                                    return Some(c.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                return None;
+            })
+            .collect::<Vec<_>>()
+    })
 }
 
 #[tracing::instrument]
