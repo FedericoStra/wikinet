@@ -1,6 +1,6 @@
 [package]
 name = "wikinet"
-version = "0.0.0"
+version = "0.0.1"
 authors = ["Federico Stra <stra.federico@gmail.com>"]
 description = "Follow the first link on Wikipedia till you reach philosophy"
 license = "MIT"
