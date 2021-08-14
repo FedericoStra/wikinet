@@ -46,7 +46,8 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
                     if tag == "a" {
                         for attr in attrs.borrow().iter() {
                             let html5ever::tree_builder::Attribute { name, value } = attr;
-                            if &name.local[..] == "href" {
+                            let key: &str = &name.local[..];
+                            if key == "href" {
                                 if let Some(_) = normalize_href(&value[..]) {
                                     let link = &value[..];
                                     tracing::debug!(link, "found");
@@ -64,11 +65,19 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
 }
 
 #[tracing::instrument]
-pub async fn get_wiki(path: &str) -> reqwest::Result<String> {
-    let mut url = "https://en.wikipedia.org".to_string();
-    url.push_str(path);
-    tracing::debug!(?url, "getting");
-    let response = reqwest::get(&url).await?;
+pub async fn get_wiki(search: &str) -> eyre::Result<String> {
+    let mut path = std::path::PathBuf::from("/wiki/");
+    path.push(search);
+
+    let mut url = reqwest::Url::parse("https://en.wikipedia.org")?;
+    url.set_path(&path.to_string_lossy()[..]);
+
+    {
+        let url = url.as_str();
+        tracing::debug!(url, "getting");
+    }
+
+    let response = reqwest::get(url).await?;
     let text = response.text().await?;
     Ok(text)
 }
