@@ -1,6 +1,8 @@
 use html5ever::rcdom::{Handle, Node, NodeData};
 use soup::prelude::*;
 
+pub mod refiter;
+
 #[tracing::instrument(skip(html))]
 pub fn get_first_link(html: &str) -> Option<Handle> {
     let soup = Soup::new(html);
@@ -78,6 +80,7 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
     None
 }
 
+#[tracing::instrument(skip(nodes))]
 pub fn filter_valid_links<'a>(
     nodes: impl Iterator<Item = &'a Node>,
 ) -> impl Iterator<Item = &'a Node> {
