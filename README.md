@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/wikinet)](https://crates.io/crates/wikinet)
 [![docs.rs](https://img.shields.io/docsrs/wikinet)](https://docs.rs/wikinet)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/FedericoStra/wikinet/Rust)](https://github.com/FedericoStra/wikinet/actions/workflows/rust.yml)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/FedericoStra/wikinet/rust.yml)](https://github.com/FedericoStra/wikinet/actions/workflows/rust.yml)
 [![MIT license](https://img.shields.io/crates/l/wikinet)](https://choosealicense.com/licenses/mit/)
 
 Follow the first link on Wikipedia till you reach philosophy.

@@ -1,3 +1,70 @@
+use scraper::{node::Element, ElementRef, Html, Node, Selector};
+use url::Url;
+
+pub const DOMAIN_STR: &str = "https://en.wikipedia.org";
+pub const PARAGRAPHS_SELECTOR_STR: &str = "#mw-content-text > .mw-parser-output > p";
+
+lazy_static::lazy_static! {
+    pub static ref DOMAIN_URL: Url = Url::parse(DOMAIN_STR).expect("cannot parse domain url");
+    pub static ref PARAGRAPHS_SELECTOR: Selector =
+        Selector::parse(PARAGRAPHS_SELECTOR_STR).expect("cannot parse <p> selector");
+}
+
+pub fn find_links(html: &Html) -> impl Iterator<Item = Url> + '_ {
+    html.select(&PARAGRAPHS_SELECTOR).flat_map(|p: ElementRef| {
+        let _span = tracing::trace_span!("find_links").entered();
+        {
+            // FIXME: avoid allocating a long string
+            let text = p.inner_html();
+            if text.len() <= 64 {
+                tracing::debug!("paragraph: {:?}", text);
+            } else {
+                tracing::debug!("paragraph: {:?} ...", &text[0..64]);
+            }
+        }
+        p.children()
+            .scan(0, |parens, noderef| {
+                let _span = tracing::trace_span!("find_links").entered();
+                let node: &scraper::Node = noderef.value();
+                if let Node::Text(text) = node {
+                    // tracing::trace!("{:?}", text);
+                    let opening = text.matches('(').count() as i32;
+                    let closing = text.matches(')').count() as i32;
+                    *parens += opening - closing;
+                    tracing::trace!(opening, closing, %parens);
+                };
+                Some((*parens, noderef))
+            })
+            .filter_map(|(parens, noderef)| {
+                let _span = tracing::trace_span!("find_links").entered();
+                let node: &scraper::Node = noderef.value();
+                if let Node::Element(el) = node {
+                    if el.name() != "a" {
+                        return None;
+                    }
+                    if parens > 0 {
+                        tracing::trace!(parens, "skipping <a>");
+                        return None;
+                    }
+                    let href = el.attr("href").expect("<a> does not have href attribute");
+                    valid_href_to_url(href)
+                } else {
+                    None
+                }
+            })
+    })
+}
+
+fn valid_href_to_url(href: &str) -> Option<Url> {
+    if !href.starts_with("/wiki/") {
+        return None;
+    }
+    if href.starts_with("/wiki/Help:IPA/") {
+        return None;
+    }
+    DOMAIN_URL.join(href).ok()
+}
+
 use html5ever::rcdom::{Handle, Node, NodeData};
 use soup::prelude::*;
 
@@ -78,46 +145,6 @@ pub fn get_first_link(html: &str) -> Option<Handle> {
         }
     }
     None
-}
-
-#[tracing::instrument(skip(nodes))]
-pub fn filter_valid_links<'a>(
-    nodes: impl Iterator<Item = &'a Node>,
-) -> impl Iterator<Item = &'a Node> {
-    nodes
-        .scan(0, |&mut parens, c| {
-            if let NodeData::Text { ref contents } = c.data {
-                let text: &str = &contents.borrow()[..];
-                let opening = text.matches('(').count() as i32;
-                let closing = text.matches(')').count() as i32;
-                tracing::trace!(opening, closing, "Text: parentheses:");
-                Some((parens + opening - closing, c))
-            } else {
-                Some((parens, c))
-            }
-        })
-        .filter_map(|(parens, c)| {
-            if let NodeData::Element { name, attrs, .. } = &c.data {
-                if parens > 0 {
-                    return None;
-                }
-                let tag: &str = &name.local[..];
-                if tag == "a" {
-                    for attr in attrs.borrow().iter() {
-                        let html5ever::tree_builder::Attribute { name, value } = attr;
-                        let key: &str = &name.local[..];
-                        if key == "href" {
-                            if let Some(_) = normalize_href(&value[..]) {
-                                let link = &value[..];
-                                tracing::debug!(link, "found");
-                                return Some(c.clone());
-                            }
-                        }
-                    }
-                }
-            }
-            return None;
-        })
 }
 
 #[tracing::instrument(skip(html))]
